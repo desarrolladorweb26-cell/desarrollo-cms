@@ -501,8 +501,8 @@
         let chartInstance = null;
 
         // Inicialización al cargar la página
-        window.onload = () => {
-            loadState();
+        window.onload = async () => {
+            await loadState();
             setupApp();
             switchTab('dashboard', true); // Bypass auth for initial load of dashboard
         };
@@ -593,21 +593,55 @@
             document.getElementById('mainContainer').scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // --- ALMACENAMIENTO (LOCALSTORAGE) ---
-        function saveState() {
-            localStorage.setItem('electionSystemState', JSON.stringify(electionState));
-        }
+// --- ALMACENAMIENTO EN LA NUBE (GOOGLE APPS SCRIPT) ---
+// Reemplaza esta URL por la que copiaste en el Paso 5
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwMwGCO_0xO-kv0TIiSyAFViQjRHa0xf-0Jo-5p-rUd4uPe94935dJ7buNqP9uJdlb_/execdonde s';
 
-        function loadState() {
-            const saved = localStorage.getItem('electionSystemState');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    electionState = { ...electionState, ...parsed };
-                    if(!electionState.config.adminPassword) electionState.config.adminPassword = 'admin';
-                } catch(e) { console.error('Error loading state'); }
+// Mostrar indicador de guardado (opcional pero recomendado)
+function showLoading(show) {
+    // Puedes agregar lógica aquí para cambiar un ícono a "Guardando..."
+}
+
+async function saveState() {
+    showLoading(true);
+    try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(electionState),
+            headers: {
+                "Content-Type": "text/plain;charset=utf-8",
             }
+        });
+        console.log("Datos guardados en la nube");
+    } catch (error) {
+        console.error("Error al guardar:", error);
+        showToast("Error de conexión al guardar en la nube", "error");
+        // Fallback: Guardar localmente si no hay internet
+        localStorage.setItem('electionSystemState_backup', JSON.stringify(electionState));
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function loadState() {
+    try {
+        const response = await fetch(GOOGLE_SCRIPT_URL);
+        const saved = await response.json();
+        
+        // Si hay datos en la nube, los usamos
+        if (saved && Object.keys(saved).length > 0) {
+            electionState = { ...electionState, ...saved };
         }
+    } catch (error) {
+        console.error("Error al cargar de la nube:", error);
+        // Fallback: Intentar cargar del backup local
+        const backup = localStorage.getItem('electionSystemState_backup');
+        if(backup) electionState = { ...electionState, ...JSON.parse(backup) };
+    }
+    
+    // Asegurar que exista la clave admin
+    if(!electionState.config.adminPassword) electionState.config.adminPassword = 'admin';
+}
 
         function checkEmptyState() {
             const banner = document.getElementById('noVotesBanner');
